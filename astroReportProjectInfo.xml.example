@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+<objects>
+		<object name="M_81" aliases="M 81, bode galaxy">
+			<exposures>
+				<filter name = "L" subexposures = "180, 300" requiredTotalExposure = "10*3600" gain = "56" offset="30" />
+ 				<filter name = "R, G, B" subexposures = "120" requiredTotalExposure = "2*3600" gain = "56" offset="30" /> 
+				<filter name = "Ha" subexposures = "600" requiredTotalExposure = "8*3600" gain = "56" offset="30" />
+			</exposures>
+		</object>
+</objects>
+
+</project>
+

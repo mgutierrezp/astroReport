@@ -1,0 +1,6 @@
+astropy
+humanize
+tqdm
+python-dateutil
+tabulate
+xmltodict
