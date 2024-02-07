@@ -2,8 +2,13 @@ QUICK START
 ==============
 
 *** precompiled binaries available for linux and windows ***
+
 *** just copy the corresponding binary from 'binaries' folder ***
+
 *** copy the conf file 'astroReport.config.xml' alongside the executable or specify the location with --config ***
+
+
+
 
 *** manual installation below: ***
 

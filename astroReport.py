@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-VERSION="1.0b"
+VERSION="1.0c"
 
 import sys,argparse,logging,os,humanize,itertools,math
 from tabulate import tabulate
@@ -264,8 +264,9 @@ for dir in options.dirs:
 			
 			requiredTotalExposureAllFilters = 0
 			remainingTimeAllFilters = 0
+			
 			#for ffilter in objects[oobject]["exposures"].keys():
-			for ffilter in reduce(lambda x,y: x+y, getObjectFilters(oobject, pinfo)):
+			for ffilter in reduce(lambda x,y: x+y, getObjectFilters(oobject, pinfo)) if pinfo is not None else objects[oobject]["exposures"].keys():
 				# ffilter = "L"
 				logger.debug("dealing with filter %s" % ffilter)
 				if pinfo is None:
