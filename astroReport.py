@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-VERSION="1.0"
+VERSION="1.0b"
 
 import sys,argparse,logging,os,humanize,itertools,math
 from tabulate import tabulate
@@ -128,7 +128,11 @@ def getObjectConfig(ob, pinfo):
 	l=list(filter(lambda x: x["@name"] == ob, pinfo["project"]["objects"]["object"]))
 	return l[0] if len(l) > 0 else None
 	
-
+def getObjectFilters(ob, pinfo):
+	if pinfo is None: return []
+	oc=getObjectConfig(ob, pinfo)
+	# return [['L'], ['R', 'G', 'B']]
+	return list(map(lambda x: stringToList(x), (map(lambda x:x["@name"], oc["exposures"]["filter"])))) if oc is not None else []
 
 
 
@@ -243,98 +247,108 @@ for dir in options.dirs:
 	
 	print()
 	print()
-	
-	for k, oobject in enumerate(objects.keys()):
-		# oobject = "M_81"
-		logger.debug("dealing with object %s" % oobject)
-		row=[]
-		
-		requiredTotalExposureAllFilters = 0
-		remainingTimeAllFilters = 0
-		for ffilter in objects[oobject]["exposures"].keys():
-			# ffilter = "L"
-			logger.debug("dealing with filter %s" % ffilter)
-			if pinfo is None:
-				logger.debug("no project info detected, so no subexposures count will be computed")
-				row.append([ffilter if ffilter.strip() != "" else "[[ no filter ]]", humanize.precisedelta(objects[oobject]["exposures"][ffilter]), "--", "--", "--"])
-				continue
-
-			if getObjectMainName(oobject, pinfo) is None:
-				# object doesn't exist in project info
-				logger.debug("skipping non existent object '%s' in project info" % oobject)
-				continue
-
-			objectConfig=getObjectConfig(oobject, pinfo)
-			objectConfig = objectConfig
-			# objectConfig = {'@name': 'M_81', '@aliases': 'M 81, bode', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}, {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}
+	if objects == {}:
+		logger.info("no fits detected. Exiting")
+		sys.exit()
+	else:
+		for k, oobject in enumerate(objects.keys()):
 			# oobject = "M_81"
-			# ffilter = 'L'
-			allFilters=list(map(lambda x: stringToList(x), (map(lambda x:x["@name"], objectConfig["exposures"]["filter"])))) if objectConfig is not None else []
-			# allFilters = [['L'], ['R', 'G', 'B']]
-			allFiltersTF = list(map(lambda x: ffilter in x, allFilters))
-			# allFiltersTF = [True, False]
-			requiredTotalExposure = None
-			collectedTime = objects[oobject]["exposures"][ffilter]
-			remainingTime = None
+			#print(objects[oobject])
+			#allFilters=list(map(lambda x: stringToList(x), (map(lambda x:x["@name"], objectConfig["exposures"]["filter"])))) if objectConfig is not None else []
+			#print(allFilters)
+			#print(reduce(lambda x,y: x+y, allFilters))
+			#print(list(objects[oobject]["exposures"].keys()))
+			#sys.exit()
+			logger.debug("dealing with object %s" % oobject)
+			row=[]
+			
+			requiredTotalExposureAllFilters = 0
+			remainingTimeAllFilters = 0
+			#for ffilter in objects[oobject]["exposures"].keys():
+			for ffilter in reduce(lambda x,y: x+y, getObjectFilters(oobject, pinfo)):
+				# ffilter = "L"
+				logger.debug("dealing with filter %s" % ffilter)
+				if pinfo is None:
+					logger.debug("no project info detected, so no subexposures count will be computed")
+					row.append([ffilter if ffilter.strip() != "" else "[[ no filter ]]", humanize.precisedelta(objects[oobject]["exposures"][ffilter]), "--", "--", "--"])
+					continue
 
-			if True in allFiltersTF:
-				# filter detected in project and object config
-				filterInfo = objectConfig["exposures"]["filter"][allFiltersTF.index(True)]
-				# filterInfo = {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}
-				requiredTotalExposure = eval(filterInfo["@requiredTotalExposure"])
-				requiredTotalExposureAllFilters += requiredTotalExposure
-				remainingTime = requiredTotalExposure - collectedTime
-				if remainingTime < 0: remainingTime = 0
-				remainingTimeAllFilters += remainingTime
-				for duration in stringToList(filterInfo["@subexposures"]):
-					 subexposure={"count":math.ceil(remainingTime / float(duration)), "duration": duration, "filter": ffilter}
-					 if "remainingSubexposures" not in objects[oobject].keys(): objects[oobject]["remainingSubexposures"] = []
-					 objects[oobject]["remainingSubexposures"].append(subexposure)
-			else:
-				logger.debug("filter %s not defined in project for object %s" % (ffilter, objectConfig["@name"] if objectConfig is not None else "noObject"))
-			if "remainingSubexposures" in objects[oobject].keys():
-				r = objects[oobject]["remainingSubexposures"]
-				remainingSubexposures = " || ".join(map(lambda x: str(x["count"])+" x "+str(x["duration"])+"sec" if x["count"] > 0 else "0", (filter(lambda x: x["filter"] == ffilter, r))))
-			else:
-				remainingSubexposures = None
-			row.append([ffilter if ffilter.strip() != "" else "[[ no filter ]]", *list(map(lambda x: humanize.precisedelta(x), [collectedTime, requiredTotalExposure, remainingTime])), remainingSubexposures])
+				if getObjectMainName(oobject, pinfo) is None:
+					# object doesn't exist in project info
+					logger.debug("skipping non existent object '%s' in project info" % oobject)
+					continue
+
+				objectConfig=getObjectConfig(oobject, pinfo)
+				objectConfig = objectConfig
+				# objectConfig = {'@name': 'M_81', '@aliases': 'M 81, bode', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}, {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}
+				# oobject = "M_81"
+				# ffilter = 'L'
+				allFilters=getObjectFilters(oobject, pinfo)
+				# allFilters = [['L'], ['R', 'G', 'B']]
+				allFiltersTF = list(map(lambda x: ffilter in x, allFilters))
+				# allFiltersTF = [True, False]
+				requiredTotalExposure = None
+				collectedTime = objects[oobject]["exposures"][ffilter]
+				remainingTime = None
+
+				if True in allFiltersTF:
+					# filter detected in project and object config
+					filterInfo = objectConfig["exposures"]["filter"][allFiltersTF.index(True)]
+					# filterInfo = {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}
+					requiredTotalExposure = eval(filterInfo["@requiredTotalExposure"])
+					requiredTotalExposureAllFilters += requiredTotalExposure
+					remainingTime = requiredTotalExposure - collectedTime
+					if remainingTime < 0: remainingTime = 0
+					remainingTimeAllFilters += remainingTime
+					for duration in stringToList(filterInfo["@subexposures"]):
+						 subexposure={"count":math.ceil(remainingTime / float(duration)), "duration": duration, "filter": ffilter}
+						 if "remainingSubexposures" not in objects[oobject].keys(): objects[oobject]["remainingSubexposures"] = []
+						 objects[oobject]["remainingSubexposures"].append(subexposure)
+				else:
+					logger.debug("filter %s not defined in project for object %s" % (ffilter, objectConfig["@name"] if objectConfig is not None else "noObject"))
+				if "remainingSubexposures" in objects[oobject].keys():
+					r = objects[oobject]["remainingSubexposures"]
+					remainingSubexposures = " || ".join(map(lambda x: str(x["count"])+" x "+str(x["duration"])+"sec" if x["count"] > 0 else "0", (filter(lambda x: x["filter"] == ffilter, r))))
+				else:
+					remainingSubexposures = None
+				row.append([ffilter if ffilter.strip() != "" else "[[ no filter ]]", *list(map(lambda x: humanize.precisedelta(x), [collectedTime, requiredTotalExposure, remainingTime])), remainingSubexposures])
+			
+			if row != []: 
+				print("Object summary")
+				row.append([">>> TOTAL <<<" , humanize.precisedelta(reduce(lambda x,y: x+y, (map(lambda x: objects[oobject]["exposures"][x], objects[oobject]["exposures"].keys())))), humanize.precisedelta(requiredTotalExposureAllFilters), humanize.precisedelta(remainingTimeAllFilters)])
+				#for fmt in ["plain","simple","github","grid","simple_grid","rounded_grid","heavy_grid","mixed_grid","double_grid","fancy_grid","outline","simple_outline","rounded_outline","heavy_outline","mixed_outline","double_outline","fancy_outline","pipe","orgtbl","asciidoc","jira","presto","pretty","psql","rst","mediawiki","moinmoin","youtrack","html","unsafehtml","latex","latex_raw","latex_booktabs","latex_longtable","textile","tsv"]:
+					#print(fmt)
+				print(tabulate(row, headers=[oobject if oobject.strip() != "" else "[[ no object ]]", "collected","required", "remaining time", "remaining subexposures"], tablefmt="simple_outline"))
+				print()
+
+			# sessions["20230314T1200"]=[{"file": "/home/...", "gain": "56", "object": "M_81", "exptime": "300", "filter": "Ha", ... }, {"file":...}] 
+			# pinfo  = {'project': {'objects': {'object': [{'@name': 'M_81', '@aliases': 'M 81, bode', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}, {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}, {'@name': 'M_106', '@aliases': 'M 106, galaxyM106', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}]}}}
+			
+			
+			if pinfo is not None or (pinfo is None and k == len(objects.keys())-1):
+				# if no project info exists, print sessions only once
+				sessionRows = []
+				for i, s in enumerate(sorted(list(sessions.keys())), start=1):
+					ffilters = {}
+					for entry in sessions[s]:
+						o1=getObjectMainName(entry["object"], pinfo)
+						o1=o1 if o1 is not None else ""
+						o2=getObjectMainName(oobject, pinfo)
+						o2=o2 if o2 is not None else ""
+						if pinfo is not None and o1.upper() != o2.upper(): continue
+						if (o1.upper() if pinfo is not None else entry['oobject'].upper() == o2.upper()) if pinfo is not None else True:
+							exptime=entry['exptime']
+							if entry["filter"] not in ffilters.keys(): ffilters[entry["filter"]] = {}
+							ffilters[entry["filter"]][exptime] = 1 if exptime not in ffilters[entry["filter"]].keys() else ffilters[entry["filter"]][exptime] + 1
+
+					finfo=[]
+					for ffilter in ffilters.keys():
+						for exp in ffilters[ffilter].keys():
+							finfo.append("%s: %s x %ssec" % (ffilter, ffilters[ffilter][exp], f'{exp:g}'))
+
+					if finfo!=[]: sessionRows.append(["SESSION_%s" % f"{i:02d}", ", ".join(finfo), s.date()])
+
+				print("Sessions summary")
+				print(tabulate(sessionRows, headers=["Session", "Lights","Date"], tablefmt="github") if sessionRows != [] else "no sessions data for '%s'" % oobject)
+				print(); print()
 		
-		if row != []: 
-			print("Object summary")
-			row.append([">>> TOTAL <<<" , humanize.precisedelta(reduce(lambda x,y: x+y, (map(lambda x: objects[oobject]["exposures"][x], objects[oobject]["exposures"].keys())))), humanize.precisedelta(requiredTotalExposureAllFilters), humanize.precisedelta(remainingTimeAllFilters)])
-			#for fmt in ["plain","simple","github","grid","simple_grid","rounded_grid","heavy_grid","mixed_grid","double_grid","fancy_grid","outline","simple_outline","rounded_outline","heavy_outline","mixed_outline","double_outline","fancy_outline","pipe","orgtbl","asciidoc","jira","presto","pretty","psql","rst","mediawiki","moinmoin","youtrack","html","unsafehtml","latex","latex_raw","latex_booktabs","latex_longtable","textile","tsv"]:
-				#print(fmt)
-			print(tabulate(row, headers=[oobject if oobject.strip() != "" else "[[ no object ]]", "collected","required", "remaining time", "remaining subexposures"], tablefmt="simple_outline"))
-			print()
-
-		# sessions["20230314T1200"]=[{"file": "/home/...", "gain": "56", "object": "M_81", "exptime": "300", "filter": "Ha", ... }, {"file":...}] 
-		# pinfo  = {'project': {'objects': {'object': [{'@name': 'M_81', '@aliases': 'M 81, bode', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}, {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}, {'@name': 'M_106', '@aliases': 'M 106, galaxyM106', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}]}}}
-		
-		
-		if pinfo is not None or (pinfo is None and k == len(objects.keys())-1):
-			# if no project info exists, print sessions only once
-			sessionRows = []
-			for i, s in enumerate(sorted(list(sessions.keys())), start=1):
-				ffilters = {}
-				for entry in sessions[s]:
-					o1=getObjectMainName(entry["object"], pinfo)
-					o1=o1 if o1 is not None else ""
-					o2=getObjectMainName(oobject, pinfo)
-					o2=o2 if o2 is not None else ""
-					if pinfo is not None and o1.upper() != o2.upper(): continue
-					if (o1.upper() if pinfo is not None else entry['oobject'].upper() == o2.upper()) if pinfo is not None else True:
-						exptime=entry['exptime']
-						if entry["filter"] not in ffilters.keys(): ffilters[entry["filter"]] = {}
-						ffilters[entry["filter"]][exptime] = 1 if exptime not in ffilters[entry["filter"]].keys() else ffilters[entry["filter"]][exptime] + 1
-
-				finfo=[]
-				for ffilter in ffilters.keys():
-					for exp in ffilters[ffilter].keys():
-						finfo.append("%s: %s x %ssec" % (ffilter, ffilters[ffilter][exp], f'{exp:g}'))
-
-				if finfo!=[]: sessionRows.append(["SESSION_%s" % f"{i:02d}", ", ".join(finfo), s.date()])
-
-			print("Sessions summary")
-			print(tabulate(sessionRows, headers=["Session", "Lights","Date"], tablefmt="github") if sessionRows != [] else "no sessions data for '%s'" % oobject)
-			print(); print()
-	
