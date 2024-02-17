@@ -11,11 +11,4 @@
 	<equipment focalRatio="5.5" darks="50" flats="20" bias="500" />
 </astrobin>
 
-<!-- <ekos>
-	<location value="xxx" />
-	<sequences dir="/home/user/sequences" />
-	<template jobTemplate="astroSummary.jobTemplate" sequenceTemplate="sequenceTemplate" scheduleJobTemplate="astroSummary.scheduleJobTemplate" scheduleTemplate="astroSummary.scheduleTemplate" />
-</ekos>
--->
-
 </config>
