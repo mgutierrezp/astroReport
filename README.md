@@ -27,6 +27,8 @@ QUICK START
 - Install python libraries within your new virtual environment
 	$ pip install -r requirements.txt
 
+- Rename astroReportProjectInfo.xml.example to astroReportProjectInfo.xml and customize if needed. Copy it alongside the executable location or specify with --config
+
 
 USAGE
 ==============

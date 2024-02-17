@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-VERSION="1.0c"
+VERSION="1.0d"
 
 import sys,argparse,logging,os,humanize,itertools,math
 from tabulate import tabulate
@@ -10,9 +10,10 @@ import dateutil.parser
 from pathlib import Path
 from functools import reduce
 
-import xmltodict
+import xmltodict, traceback
 
 from tqdm import tqdm
+from functools import cmp_to_key
 
 DEFAULT_CONFIG_FILE=Path(sys.argv[0]).parent.joinpath(Path(Path(sys.argv[0]).stem).with_suffix(".config.xml"))
 PROJECT_INFO_FILE="astroReportProjectInfo.xml"
@@ -28,15 +29,28 @@ def loadProjectInfo(f):
 	
 	return p
 
-
 def loadConfig(options):
 	if not os.path.exists(options.config_file):
 		logger.critical("config file not found: %s" % options.config_file)
 		sys.exit(1)
-		
-	with open(options.config_file, "r") as f:
-		p=xmltodict.parse(f.read())
-	
+
+	try:
+		with open(options.config_file, "r") as f:
+			p=xmltodict.parse(f.read())
+			p["config"]["general"]["fitfile"]["@extensions"]
+			p["config"]["general"]["filters"]["@naturalOrder"]
+			if "astrobin" in p["config"].keys():
+				p["config"]["astrobin"]["filtersID"]
+				p["config"]["astrobin"]["equipment"]
+				if set(p["config"]["astrobin"]["equipment"].keys()) != {'@focalRatio', '@darks', '@flats', '@bias'}:
+					logger.critical("there is some missing info from astrobin config. Please review the config file")
+					sys.exit()
+
+	except Exception as e:
+		logger.critical("error while parsing config file. Find below the original exception; most likely due to a syntax error")
+		traceback.print_exc()
+		sys.exit(1)
+
 	return p
 
 
@@ -126,6 +140,7 @@ def stringToList(s):
 
 def getObjectConfig(ob, pinfo):
 	l=list(filter(lambda x: x["@name"] == ob, pinfo["project"]["objects"]["object"]))
+
 	return l[0] if len(l) > 0 else None
 	
 def getObjectFilters(ob, pinfo):
@@ -265,8 +280,20 @@ for dir in options.dirs:
 			requiredTotalExposureAllFilters = 0
 			remainingTimeAllFilters = 0
 			
-			#for ffilter in objects[oobject]["exposures"].keys():
-			for ffilter in reduce(lambda x,y: x+y, getObjectFilters(oobject, pinfo)) if pinfo is not None else objects[oobject]["exposures"].keys():
+			def naturalOrderFilterSort(x, y):
+				if not "filters" in config["config"]["general"].keys() or not "@naturalOrder" in config["config"]["general"]["filters"].keys(): return 0
+				c=config["config"]["general"]["filters"]["@naturalOrder"]
+				if x not in c and y in c:
+					return 1
+				if x in c and not y in c:
+					return -1
+				if x not in c and y not in c:
+					return 0
+				return -1 if c.index(x) < c.index(y) else 1
+
+			iiter = reduce(lambda x,y: x+y, getObjectFilters(oobject, pinfo)) if pinfo is not None else objects[oobject]["exposures"].keys()
+			iiter = sorted(iiter, key=cmp_to_key(naturalOrderFilterSort))
+			for ffilter in iiter:
 				# ffilter = "L"
 				logger.debug("dealing with filter %s" % ffilter)
 				if pinfo is None:
@@ -319,7 +346,7 @@ for dir in options.dirs:
 				row.append([">>> TOTAL <<<" , humanize.precisedelta(reduce(lambda x,y: x+y, (map(lambda x: objects[oobject]["exposures"][x], objects[oobject]["exposures"].keys())))), humanize.precisedelta(requiredTotalExposureAllFilters), humanize.precisedelta(remainingTimeAllFilters)])
 				#for fmt in ["plain","simple","github","grid","simple_grid","rounded_grid","heavy_grid","mixed_grid","double_grid","fancy_grid","outline","simple_outline","rounded_outline","heavy_outline","mixed_outline","double_outline","fancy_outline","pipe","orgtbl","asciidoc","jira","presto","pretty","psql","rst","mediawiki","moinmoin","youtrack","html","unsafehtml","latex","latex_raw","latex_booktabs","latex_longtable","textile","tsv"]:
 					#print(fmt)
-				print(tabulate(row, headers=[oobject if oobject.strip() != "" else "[[ no object ]]", "collected","required", "remaining time", "remaining subexposures"], tablefmt="simple_outline"))
+				print(tabulate(row, headers=[oobject if oobject.strip() != "" else "[[ no object ]]", "collected","required", "remaining time", "remaining subexposures"], tablefmt="pretty"))
 				print()
 
 			# sessions["20230314T1200"]=[{"file": "/home/...", "gain": "56", "object": "M_81", "exptime": "300", "filter": "Ha", ... }, {"file":...}] 
@@ -328,10 +355,12 @@ for dir in options.dirs:
 			
 			if pinfo is not None or (pinfo is None and k == len(objects.keys())-1):
 				# if no project info exists, print sessions only once
+				if "astrobin" in config["config"].keys(): astrobincsv = [["date","filter","number","duration","gain","sensorCooling","fNumber","darks","flats","bias"]]
 				sessionRows = []
 				for i, s in enumerate(sorted(list(sessions.keys())), start=1):
 					ffilters = {}
 					for entry in sessions[s]:
+						# entry = {'file': PosixPath('SESSION_06/M_81/Light/Ha/M_81_Light_Ha_300_secs__016.fits'), 'gain': 56.0, 'object': 'M_81', 'exptime': 300.0, 'filter': 'Ha', 'offset': 30.0, 'ccd_temp': -4.9}
 						o1=getObjectMainName(entry["object"], pinfo)
 						o1=o1 if o1 is not None else ""
 						o2=getObjectMainName(oobject, pinfo)
@@ -339,17 +368,39 @@ for dir in options.dirs:
 						if pinfo is not None and o1.upper() != o2.upper(): continue
 						if (o1.upper() if pinfo is not None else entry['oobject'].upper() == o2.upper()) if pinfo is not None else True:
 							exptime=entry['exptime']
-							if entry["filter"] not in ffilters.keys(): ffilters[entry["filter"]] = {}
-							ffilters[entry["filter"]][exptime] = 1 if exptime not in ffilters[entry["filter"]].keys() else ffilters[entry["filter"]][exptime] + 1
+							ccd_temp=entry['ccd_temp'] 
+							gain=int(entry['gain'])
+							
+							if entry["filter"] not in ffilters.keys(): 
+								ffilters[entry["filter"]] = {"exposures":{}, "ccd_temp": 0}
+
+							ffilters[entry["filter"]]["exposures"][exptime] = 1 if exptime not in ffilters[entry["filter"]]["exposures"].keys() else ffilters[entry["filter"]]["exposures"][exptime] + 1
+							# I will take into account the min temperature registered
+							ffilters[entry["filter"]]["ccd_temp"] = min([ccd_temp, ffilters[entry["filter"]]["ccd_temp"]])
+							# hopefully gain will be always the same 8-)  If not, you have a problem!
+							ffilters[entry["filter"]]["gain"] = gain
 
 					finfo=[]
+					# ffilters = {'R': {'exposures': {120.0: 13}, 'ccd_temp': -5.0}, 'B': {'exposures': {120.0: 10}, 'ccd_temp': -5.0}, 'G': {'exposures': {120.0: 10}, 'ccd_temp': -5.0}}
+
 					for ffilter in ffilters.keys():
-						for exp in ffilters[ffilter].keys():
-							finfo.append("%s: %s x %ssec" % (ffilter, ffilters[ffilter][exp], f'{exp:g}'))
+						# ffilter="L"
+						for exp in ffilters[ffilter]["exposures"].keys():
+							finfo.append("%s: %s x %ssec" % (ffilter, ffilters[ffilter]["exposures"][exp], f'{exp:g}'))
+							if "astrobin" in config["config"].keys(): 
+								astrobincsv.append([str(s.date()), config["config"]["astrobin"]["filtersID"]["@"+ffilter] if "@"+ffilter in config["config"]["astrobin"]["filtersID"].keys() else "--", ffilters[ffilter]["exposures"][exp], ffilters[ffilter]["gain"], ffilters[ffilter]["ccd_temp"], config["config"]["astrobin"]["equipment"]["@focalRatio"], config["config"]["astrobin"]["equipment"]["@darks"], config["config"]["astrobin"]["equipment"]["@flats"], config["config"]["astrobin"]["equipment"]["@bias"]])
 
 					if finfo!=[]: sessionRows.append(["SESSION_%s" % f"{i:02d}", ", ".join(finfo), s.date()])
-
+					
+					
 				print("Sessions summary")
 				print(tabulate(sessionRows, headers=["Session", "Lights","Date"], tablefmt="github") if sessionRows != [] else "no sessions data for '%s'" % oobject)
+
+				if "astrobin" in config["config"].keys(): 
+					print()
+					print("Astrobin csv summary:")
+					for f in astrobincsv:
+						print(','.join(map(lambda x:str(x), f)))
+
 				print(); print()
 		
