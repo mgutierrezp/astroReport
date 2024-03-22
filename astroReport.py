@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-VERSION="1.0d"
+VERSION="1.0e"
 
 import sys,argparse,logging,os,humanize,itertools,math
 from tabulate import tabulate
@@ -9,20 +9,29 @@ from astropy.io import fits
 import dateutil.parser
 from pathlib import Path
 from functools import reduce
+from string import Template
+from astropy import units as u                                                                                                                                                                                                        
+from astropy.coordinates import SkyCoord      
 
 import xmltodict, traceback
 
 from tqdm import tqdm
 from functools import cmp_to_key
 
-DEFAULT_CONFIG_FILE=Path(sys.argv[0]).parent.joinpath(Path(Path(sys.argv[0]).stem).with_suffix(".config.xml"))
+SCRIPT_DIR=Path(sys.argv[0]).parent
+DEFAULT_CONFIG_FILE=SCRIPT_DIR.joinpath(Path(Path(sys.argv[0]).stem).with_suffix(".config.xml"))
 PROJECT_INFO_FILE="astroReportProjectInfo.xml"
 SCRIPT_NAME = Path(sys.argv[0]).stem
 
+def doExit(err=0):
+	if options.woe:
+		input("Press Enter to exit")
+	sys.exit(err)
+	
 def loadProjectInfo(f):
 	if not os.path.exists(f):
 		logger.critical("project info file not found: %s" % f)
-		sys.exit(1)
+		doExit(1)
 		
 	with open(f, "r") as ff:
 		p=xmltodict.parse(ff.read(), force_list=('filter', 'object'))
@@ -32,7 +41,7 @@ def loadProjectInfo(f):
 def loadConfig(options):
 	if not os.path.exists(options.config_file):
 		logger.critical("config file not found: %s" % options.config_file)
-		sys.exit(1)
+		doExit(1)
 
 	try:
 		with open(options.config_file, "r") as f:
@@ -44,12 +53,41 @@ def loadConfig(options):
 				p["config"]["astrobin"]["equipment"]
 				if set(p["config"]["astrobin"]["equipment"].keys()) != {'@focalRatio', '@darks', '@flats', '@bias'}:
 					logger.critical("there is some missing info from astrobin config. Please review the config file")
-					sys.exit()
+					doExit(1)
+
+			if "ekos" in p["config"].keys() and options.ekos:
+				'''				
+				if "equipment" not in p["config"].keys() or \
+				not "camera" in p["config"]["equipment"].keys() or \
+				set(p["config"]["equipment"]["camera"].keys()) != {'@width', '@height'}:
+					logger.critical("equipment config missed or not completely defined. This is needed for ekos sequences creation. Please fix")
+					sys.exit(1)
+				'''					
+				p["config"]["ekos"]["location"]
+				p["config"]["ekos"]["sequences"]
+				p["config"]["ekos"]["templates"]
+				if  set(p["config"]["ekos"]["location"].keys()) != {'@name'}or \
+				set(p["config"]["ekos"]["sequences"].keys()) != {'@dir'} or \
+				set(p["config"]["ekos"]["templates"].keys()) != {'@subdir', '@sequenceJobTemplate','@sequenceTemplate','@scheduleJobTemplate','@scheduleTemplate'}:
+					logger.critical("there is some missing info from ekos config. Please review the config file")
+					doExit(1)
+				ekosSequencesDir=p["config"]["ekos"]["sequences"]["@dir"]
+				if not os.path.exists(ekosSequencesDir):
+					logger.critical("ekos sequences dir %s does not exist. Please fix" % ekosSequencesDir)
+					doExit(1)
+				ekosTemplatesDir=SCRIPT_DIR.joinpath(p["config"]["ekos"]["templates"]["@subdir"])
+				if not os.path.exists(ekosTemplatesDir):
+					logger.critical("ekos templates dir %s does not exist. Please fix" % ekosTemplatesDir)
+					doExit(1)
+				for f in ['sequenceJobTemplate','sequenceTemplate','scheduleJobTemplate','scheduleTemplate']:
+					if not os.path.exists(ekosTemplatesDir.joinpath(f)):
+						logger.critical("some ekos template(s) do not exist. Please fix")
+						doExit(1)
 
 	except Exception as e:
 		logger.critical("error while parsing config file. Find below the original exception; most likely due to a syntax error")
 		traceback.print_exc()
-		sys.exit(1)
+		doExit(1)
 
 	return p
 
@@ -92,6 +130,8 @@ def parse_options():
 	parser.add_argument("-v", dest="verbose", action="store_true", help="write some debug info")
 	parser.add_argument("-V", "--version", action="version", version=VERSION)
 	parser.add_argument("--config-file", dest="config_file", default=DEFAULT_CONFIG_FILE, action="store", help="alternative xml config file. Default: %s" % DEFAULT_CONFIG_FILE)
+	parser.add_argument("--ekos", dest="ekos", default=False, action="store_true", help="generate ekos sequences. Default: False")
+	parser.add_argument("--wait-on-exit", "--woe", dest="woe", default=False, action="store_true", help="wait on exit. Default: False")
 	parser.add_argument("dirs", nargs='+', type=lambda x: is_valid_file(parser, x))
 
 	return parser
@@ -149,9 +189,17 @@ def getObjectFilters(ob, pinfo):
 	# return [['L'], ['R', 'G', 'B']]
 	return list(map(lambda x: stringToList(x), (map(lambda x:x["@name"], oc["exposures"]["filter"])))) if oc is not None else []
 
+def getFilterProperties(oobject, filt, pinfo):
+	# oobject = "M_81"
+	# filt = 'L'
+	# pinfo  = {'project': {'objects': {'object': [{'@name': 'M_81', '@aliases': 'M 81, bode', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}, {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}, {'@name': 'M_106', '@aliases': 'M 106, galaxyM106', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}]}}}
+	for f in getObjectConfig(oobject, pinfo)["exposures"]["filter"]:
+		if filt in stringToList(f["@name"]):
+			return f
 
+	return None
 
-
+#####################################################################################
 
 
 
@@ -166,9 +214,10 @@ logger.info("running %s version %s" % (SCRIPT_NAME, VERSION))
 config=loadConfig(options)
 
 extensions=eval("list(%s)" % list(map(lambda x:x.strip(), config["config"]["general"]["fitfile"]["@extensions"].split(","))))
-logger.info("generating report...")
+schedulerJobs=[]
 
 for dir in options.dirs:
+	logger.info("scanning files in %s" % dir)
 	filesList = []
 	for root, dirs, files in os.walk(dir, followlinks=True):
 		for file in files:
@@ -177,10 +226,12 @@ for dir in options.dirs:
 	pinfo = None
 	sessions={}
 	objects={}
-	bar=tqdm(range(len(filesList)-1))
+	bar=tqdm(range(len(filesList)))
 	orphanedObjects=set()
 
-	for fullPath, b in zip(filesList, bar):
+	for fullPath in filesList:
+		bar.update()
+		
 		if PROJECT_INFO_FILE == Path(fullPath).name and pinfo is None:
 			pinfo = loadProjectInfo(fullPath)
 			# pinfo  = {'project': {'objects': {'object': [{'@name': 'M_81', '@aliases': 'M 81, bode', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}, {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}, {'@name': 'M_106', '@aliases': 'M 106, galaxyM106', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}]}}}
@@ -264,7 +315,7 @@ for dir in options.dirs:
 	print()
 	if objects == {}:
 		logger.info("no fits detected. Exiting")
-		sys.exit()
+		doExit()
 	else:
 		for k, oobject in enumerate(objects.keys()):
 			# oobject = "M_81"
@@ -330,8 +381,9 @@ for dir in options.dirs:
 					remainingTimeAllFilters += remainingTime
 					for duration in stringToList(filterInfo["@subexposures"]):
 						 subexposure={"count":math.ceil(remainingTime / float(duration)), "duration": duration, "filter": ffilter}
-						 if "remainingSubexposures" not in objects[oobject].keys(): objects[oobject]["remainingSubexposures"] = []
-						 objects[oobject]["remainingSubexposures"].append(subexposure)
+						 if subexposure["count"] > 0:
+							 if "remainingSubexposures" not in objects[oobject].keys(): objects[oobject]["remainingSubexposures"] = []
+							 objects[oobject]["remainingSubexposures"].append(subexposure)
 				else:
 					logger.debug("filter %s not defined in project for object %s" % (ffilter, objectConfig["@name"] if objectConfig is not None else "noObject"))
 				if "remainingSubexposures" in objects[oobject].keys():
@@ -355,7 +407,7 @@ for dir in options.dirs:
 			
 			if pinfo is not None or (pinfo is None and k == len(objects.keys())-1):
 				# if no project info exists, print sessions only once
-				if "astrobin" in config["config"].keys(): astrobincsv = [["date","filter","number","duration","gain","sensorCooling","fNumber","darks","flats","bias"]]
+				if "astrobin" in config["config"].keys() and pinfo is not None: astrobincsv = [["date","filter","number","duration","gain","sensorCooling","fNumber","darks","flats","bias"]]
 				sessionRows = []
 				for i, s in enumerate(sorted(list(sessions.keys())), start=1):
 					ffilters = {}
@@ -367,18 +419,23 @@ for dir in options.dirs:
 						o2=o2 if o2 is not None else ""
 						if pinfo is not None and o1.upper() != o2.upper(): continue
 						if (o1.upper() if pinfo is not None else entry['oobject'].upper() == o2.upper()) if pinfo is not None else True:
-							exptime=entry['exptime']
-							ccd_temp=entry['ccd_temp'] 
-							gain=int(entry['gain'])
-							
-							if entry["filter"] not in ffilters.keys(): 
-								ffilters[entry["filter"]] = {"exposures":{}, "ccd_temp": 0}
+							if entry["gain"] is not None:
+								exptime=entry['exptime']
+								ccd_temp=entry['ccd_temp'] 
+								gain=int(entry['gain'])
+								offset=int(entry['offset'])
+								
+								if entry["filter"] not in ffilters.keys(): 
+									ffilters[entry["filter"]] = {"exposures":{}, "ccd_temp": 0}
 
-							ffilters[entry["filter"]]["exposures"][exptime] = 1 if exptime not in ffilters[entry["filter"]]["exposures"].keys() else ffilters[entry["filter"]]["exposures"][exptime] + 1
-							# I will take into account the min temperature registered
-							ffilters[entry["filter"]]["ccd_temp"] = min([ccd_temp, ffilters[entry["filter"]]["ccd_temp"]])
-							# hopefully gain will be always the same 8-)  If not, you have a problem!
-							ffilters[entry["filter"]]["gain"] = gain
+								ffilters[entry["filter"]]["exposures"][exptime] = 1 if exptime not in ffilters[entry["filter"]]["exposures"].keys() else ffilters[entry["filter"]]["exposures"][exptime] + 1
+								# I will take into account the min temperature registered
+								ffilters[entry["filter"]]["ccd_temp"] = min([ccd_temp, ffilters[entry["filter"]]["ccd_temp"]])
+								# hopefully gain will be always the same 8-)  If not, you have a problem!
+								ffilters[entry["filter"]]["gain"] = gain
+								ffilters[entry["filter"]]["offset"] = offset
+							else:
+								logger.warning("discarding file %s. No gain value within fits headers" % entry["file"])
 
 					finfo=[]
 					# ffilters = {'R': {'exposures': {120.0: 13}, 'ccd_temp': -5.0}, 'B': {'exposures': {120.0: 10}, 'ccd_temp': -5.0}, 'G': {'exposures': {120.0: 10}, 'ccd_temp': -5.0}}
@@ -387,7 +444,7 @@ for dir in options.dirs:
 						# ffilter="L"
 						for exp in ffilters[ffilter]["exposures"].keys():
 							finfo.append("%s: %s x %ssec" % (ffilter, ffilters[ffilter]["exposures"][exp], f'{exp:g}'))
-							if "astrobin" in config["config"].keys(): 
+							if "astrobin" in config["config"].keys() and pinfo is not None: 
 								astrobincsv.append([str(s.date()), config["config"]["astrobin"]["filtersID"]["@"+ffilter] if "@"+ffilter in config["config"]["astrobin"]["filtersID"].keys() else "--", ffilters[ffilter]["exposures"][exp], ffilters[ffilter]["gain"], ffilters[ffilter]["ccd_temp"], config["config"]["astrobin"]["equipment"]["@focalRatio"], config["config"]["astrobin"]["equipment"]["@darks"], config["config"]["astrobin"]["equipment"]["@flats"], config["config"]["astrobin"]["equipment"]["@bias"]])
 
 					if finfo!=[]: sessionRows.append(["SESSION_%s" % f"{i:02d}", ", ".join(finfo), s.date()])
@@ -396,7 +453,7 @@ for dir in options.dirs:
 				print("Sessions summary")
 				print(tabulate(sessionRows, headers=["Session", "Lights","Date"], tablefmt="github") if sessionRows != [] else "no sessions data for '%s'" % oobject)
 
-				if "astrobin" in config["config"].keys(): 
+				if "astrobin" in config["config"].keys() and pinfo is not None: 
 					print()
 					print("Astrobin csv summary:")
 					for f in astrobincsv:
@@ -404,3 +461,108 @@ for dir in options.dirs:
 
 				print(); print()
 		
+			if "ekos" in config["config"].keys() and pinfo is not None and options.ekos:
+				if "remainingSubexposures" in objects[oobject].keys():
+					sequencesDir = Path(config["config"]["ekos"]["sequences"]["@dir"])
+					logger.info("generating ekos files in %s" % sequencesDir)
+					sequenceJobTemplate = Path(SCRIPT_DIR)
+					sequenceJobTemplate = sequenceJobTemplate.joinpath(config["config"]["ekos"]["templates"]["@subdir"])
+					sequenceJobTemplate = sequenceJobTemplate.joinpath(config["config"]["ekos"]["templates"]["@sequenceJobTemplate"])
+					sequenceTemplate = Path(SCRIPT_DIR)
+					sequenceTemplate = sequenceTemplate.joinpath(config["config"]["ekos"]["templates"]["@subdir"])
+					sequenceTemplate = sequenceTemplate.joinpath(config["config"]["ekos"]["templates"]["@sequenceTemplate"])
+					scheduleJobTemplate = Path(SCRIPT_DIR)
+					scheduleJobTemplate = scheduleJobTemplate.joinpath(config["config"]["ekos"]["templates"]["@subdir"])
+					scheduleJobTemplate = scheduleJobTemplate.joinpath(config["config"]["ekos"]["templates"]["@scheduleJobTemplate"])
+					scheduleTemplate = Path(SCRIPT_DIR)
+					scheduleTemplate = scheduleTemplate.joinpath(config["config"]["ekos"]["templates"]["@subdir"])
+					scheduleTemplate = scheduleTemplate.joinpath(config["config"]["ekos"]["templates"]["@scheduleTemplate"])
+					if not os.path.exists(sequenceJobTemplate) or not os.path.exists(sequenceTemplate):
+						logger.critical("some ekos template is missing. Please review config. Skipping")
+					else:
+						# remainingSubexposures = [{'count': 164, 'duration': '180', 'filter': 'L'}, {'count': 47, 'duration': '120', 'filter': 'R'}, {'count': 50, 'duration': '120', 'filter': 'G'}, {'count': 50, 'duration': '120', 'filter': 'B'}]
+						# logger.info("building sequences")
+						sequenceJobs=[]
+						filters=[]
+						for remainingSubexposure in objects[oobject]["remainingSubexposures"]:
+							# remainingSubexposure = {'count': 164, 'duration': '180', 'filter': 'L'}
+							filters.append(remainingSubexposure["filter"])
+							filterConfig=getFilterProperties(oobject,remainingSubexposure["filter"], pinfo)
+							# filterConfig = {'@name': 'L', '@subexposures': '180', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30', '@binning': '1'}
+							d = {'filter':remainingSubexposure["filter"], 'exposure':remainingSubexposure["duration"], 'gain':filterConfig["@gain"],'count':remainingSubexposure["count"], 'offset':filterConfig["@offset"], "binX": filterConfig["@binning"], "binY": filterConfig["@binning"], "width": getObjectConfig(oobject, pinfo)["camera"]["@width"], "height": getObjectConfig(oobject, pinfo)["camera"]["@height"], "temperature": getObjectConfig(oobject, pinfo)["camera"]["@temperature"]}
+							with open(sequenceJobTemplate) as f:
+								src = Template(f.read())
+								result = src.substitute(d)
+								sequenceJobs.append(result)
+
+						if sequenceJobs != []:
+							d = {'jobs':"".join(sequenceJobs)}
+							with open(sequenceTemplate, 'r') as f:
+								src = Template(f.read())
+								result = src.substitute(d)					
+
+							fname = sequencesDir.joinpath(oobject+ "_"+"-".join(filters)+"_" + str(dt.date.today())+".esq")
+							with open(fname,"w") as f:
+								f.write(result)
+								logger.info("sequence generated: %s" % fname)
+								objectConfig = getObjectConfig(oobject, pinfo)
+								ra, dec = 0, 0
+								referenceFit = ""
+								referenceFitFound = False
+								if "referenceFit" in objectConfig.keys():
+									if objectConfig["referenceFit"]["@file"] ==  "auto":
+										logger.debug("trying to find a fit reference in %s for object %s" % (sequencesDir, oobject))
+										for rroot, ddirs, ffiles in os.walk(sequencesDir, followlinks=True):
+											if referenceFitFound: break
+											for ffile in ffiles:
+												if referenceFitFound: break
+												ffx=Path(rroot).joinpath(ffile)
+												if True in map(lambda x:str(ffx).endswith(x), extensions):
+													# valid fit file
+													logger.debug(" considering %s. Object is %s" % (ffx, getFitHeaders(ffx)["OBJECT"]))
+													if getFitHeaders(ffx)["OBJECT"].lower() in  map(lambda x: x.lower(), getObjectAliases(oobject, pinfo) + [getObjectMainName(oobject, pinfo)]):
+														logger.debug(" valid. Getting RA and DEC values")
+														referenceFitFound=True
+														try:
+															coords = SkyCoord(ra=getFitHeaders(ffx)["RA"]*u.degree, dec=getFitHeaders(ffx)["DEC"]*u.degree, frame='icrs')       
+															ra, dec = coords.ra.hour, coords.dec.deg
+														except:
+															logger.warning("could not retrieve AR and DEC coordinates from reference fit headers. Please fix manually in ekos scheduler when importing the .esl file")
+														referenceFit=ffx
+													else:
+														logger.debug(" not valid")
+									else:
+										if not os.path.exists(objectConfig["referenceFit"]["@file"]):
+											logger.warning("reference fit %s does not exist" % objectConfig["referenceFit"]["@file"])
+								if not referenceFitFound:
+									logger.warning("no fit reference for object %s. Getting RA and DEC from object name" % oobject)
+									try:
+										coords=SkyCoord.from_name(oobject)
+										ra, dec = coords.ra.hour, coords.dec.deg
+									except:
+										logger.warning("could not retrieve AR and DEC coordinates from catalog. Please fix manually in ekos scheduler when importing the .esl file")
+								
+								d={"object": oobject, "ra": ra, "dec": dec, "sequence": fname, "fit": referenceFit, "constraints": ""}
+								logger.debug("adding scheduler job: %s" % d)
+								#schedulerJobs.append(sjob)
+								with open(scheduleJobTemplate) as f:
+									src = Template(f.read())
+									result = src.substitute(d)
+									schedulerJobs.append(result)
+				else:
+					logger.info("no remaining subexposures. No ekos sequences will be generated")
+						
+
+if schedulerJobs != []:
+	logger.info("creating schedule")
+	d = {'jobs':"".join(schedulerJobs)}
+	with open(scheduleTemplate, 'r') as f:
+		src = Template(f.read())
+		result = src.substitute(d)					
+
+	fname = sequencesDir.joinpath(str(dt.date.today())+".esl")
+	with open(fname,"w") as f:
+		f.write(result)
+		logger.info("schedule generated: %s" % fname)
+
+doExit()

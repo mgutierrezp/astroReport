@@ -1,0 +1,29 @@
+<Job>
+<Name>$object</Name>
+<Priority>10</Priority>
+<Coordinates>
+<J2000RA>$ra</J2000RA>
+<J2000DE>$dec</J2000DE>
+</Coordinates>
+<FITS>$fit</FITS>
+<Sequence>$sequence</Sequence>
+<StartupCondition>
+<Condition>ASAP</Condition>
+</StartupCondition>
+<Constraints>
+$constraints
+<Constraint value='45'>MinimumAltitude</Constraint>
+<Constraint value='0'>MoonSeparation</Constraint>
+<Constraint>EnforceTwilight</Constraint>
+<Constraint>EnforceArtificialHorizon</Constraint>
+</Constraints>
+<CompletionCondition>
+<Condition>Sequence</Condition>
+</CompletionCondition>
+<Steps>
+<Step>Track</Step>
+<Step>Focus</Step>
+<Step>Align</Step>
+<Step>Guide</Step>
+</Steps>
+</Job>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SchedulerList version='1.5'>
+<Profile>Default</Profile>
+$jobs
+<SchedulerAlgorithm value='1'/>
+<ErrorHandlingStrategy value='1'>
+<delay>0</delay>
+</ErrorHandlingStrategy>
+<StartupProcedure>
+<Procedure>UnparkMount</Procedure>
+</StartupProcedure>
+<ShutdownProcedure>
+<Procedure>ParkMount</Procedure>
+<Procedure value='/home/mgutierrez/scripts/shutdownProcedure.sh'>ShutdownScript</Procedure>
+</ShutdownProcedure>
+</SchedulerList>

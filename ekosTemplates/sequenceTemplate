@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SequenceQueue version='2.4'>
+<GuideDeviation enabled='true'>1.5</GuideDeviation>
+<GuideStartDeviation enabled='true'>1.5</GuideStartDeviation>
+<Autofocus enabled='false'>0</Autofocus>
+<RefocusOnTemperatureDelta enabled='true'>1</RefocusOnTemperatureDelta>
+<RefocusEveryN enabled='true'>40</RefocusEveryN>
+<RefocusOnMeridianFlip enabled='false'/>
+$jobs
+</SequenceQueue>
