@@ -1,39 +1,51 @@
-QUICK START
+INTRODUCCIÓN
 ==============
+    TODO  
 
-*** precompiled binaries available for linux and windows ***
-
-*** just copy the corresponding binary from 'binaries' folder ***
-
-*** copy the conf file 'astroReport.config.xml' alongside the executable or specify the location with --config ***
-
-
-
-
-*** manual installation below: ***
-
-- Install Python >= 3.6
-
-- Create a new virtual environment and activate it (ensure you are executing python v3 and not v2!):
-	$ python -m venv myVirtualEnv
-	# linux users:
-		$ source myVirtualEnv/bin/activate
-	# windows users:
-		# if using powershell
-			$ myVirtualEnv\Scripts\Activate.ps1
-		# if using a regular command prompt
-			$ myVirtualEnv\Scripts\activate.bat
-
-- Install python libraries within your new virtual environment
-	$ pip install -r requirements.txt
-
-- Rename astroReportProjectInfo.xml.example to astroReportProjectInfo.xml and customize if needed. Copy it alongside the executable location or specify with --config
-
-
-USAGE
+INSTALACIÓN RÁPIDA (recomendado)
 ==============
-- Choose a directory you want to analyze, and run
-	
-	$ python astroReport.py /some/dir/of/your/choice
+Usuarios windows 10 y 11:  
+- Descarga el archivo 'install.ps1' en tu ordenador y búscalo con el explorador de archivos  
+- Click derecho sobre el archivo -> ejecutar con Powershell. Se iniciará el instalador y ejecutará automáticamente las siguientes tareas:
+    - Descargará los archivos necesarios en C:\Usuarios\Público\astroReport
+    - Importará en el registro de windows la configuración necesaria para que astroReport aparezca en el menú contextual del explorador de archivos
+    - NOTA: si no puedes ejecutar el archivo ps1, abre un Powershell como administrador y ejecuta: 
+        - Set-ExecutionPolicy -ExecutionPolicy RemoteSigned
+        - Acepta con 'Y'
+        - Si quieres, una vez instalado astroReport vuelve a habilitar esta opción
 
-- Additionally, move astroReportProjectInfo.xml.example to /some/dir/of/your/choice/astroReportProjectInfo.xml and customize it. Then, launch the same command again
+
+
+INSTALACIÓN MANUAL (no recomendado)
+==============
+- Instalar Python >= 3.12
+- Cree un nuevo entorno virtual y actívelo (asegúrese de que está ejecutando python v3 y no v2):
+
+        $ python -m venv whatsup_venv
+        # usuarios linux:
+
+                $ source astroReport_env/bin/activate
+
+        # usuarios de windows:
+                # si usa powershell
+
+                        $ astroReport_env\Scripts\Activate.ps1
+
+                # si utiliza un símbolo del sistema normal
+
+                        $ astroReport_env\Scripts\activate.bat
+
+- Instale las librerías python en su nuevo entorno virtual
+
+        $ pip install -r requirements.txt
+
+
+USO
+==============
+TODO
+
+Click derecho sobre una carpeta con los fits -> astroReport
+
+ARCHIVO DE CONFIGURACIÓN
+==============
+TODO
