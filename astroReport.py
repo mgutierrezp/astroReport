@@ -326,8 +326,8 @@ for dir in options.dirs:
 	print()
 	print()
 	if objects == {}:
-		logger.info("no fits detected. Exiting")
-		doExit()
+		logger.info("no fits detected")
+		continue
 	else:
 		for k, oobject in enumerate(objects.keys()):
 			# oobject = "M_81"
