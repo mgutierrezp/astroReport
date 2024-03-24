@@ -6,18 +6,18 @@
 	<filters naturalOrder="L, R, G, B, Ha, OIII, SII" />
 </general>
 
-<!-- <astrobin>
+<astrobin>
 	<filtersID L="4732" R="4652" G="4646" B="4640" Ha="4665" SII="4846" OIII="4775" />
 	<equipment focalRatio="5.5" darks="50" flats="20" bias="500" />
-</astrobin> -->
+</astrobin>
 
 <ekos>
-	<location name="xxx" />
+	<location name="Tomares" />
 	<templates subdir="ekosTemplates" sequenceJobTemplate="sequenceJobTemplate" sequenceTemplate="sequenceTemplate" scheduleJobTemplate="scheduleJobTemplate" scheduleTemplate="scheduleTemplate" />
 <!--	<moonLimits>
 		<filter name="Ha, SII" moonThresholds="{'0,60': 0, '61,80': 30, '81,100': 60}" />
 	</moonLimits> -->
-	<sequences dir="/xxx/astroReportSequences" />
+	<sequences dir="/home/mgutierrez/astroReportSequences" />
 </ekos> 
 
 </config>

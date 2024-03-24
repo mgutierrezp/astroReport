@@ -1,6 +1,6 @@
 <Job>
 <Name>$object</Name>
-<Priority>10</Priority>
+<Group></Group>
 <Coordinates>
 <J2000RA>$ra</J2000RA>
 <J2000DE>$dec</J2000DE>

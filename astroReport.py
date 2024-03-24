@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-VERSION="1.0e"
+VERSION="1.0f"
 
 import sys,argparse,logging,os,humanize,itertools,math
 from tabulate import tabulate
@@ -101,13 +101,15 @@ def getFitHeaders(fit):
 		  return True
 	  except:
 		  return False
-	
-	with fits.open(fit) as hduList:
-		headers = ["READMODE", "OBJECT", "GAIN", "OFFSET",  "EXPTIME", "EXPOSURE", "IMAGETYP", "DATE-OBS", "CCD-TEMP", "FILTER", "XBINNING", "YBINNING","RA","DEC"]
-		fitHeaders=dict(list(zip(headers, map(lambda x:hduList[0].header[x] if x.lower() in map(lambda x:x.lower(), hduList[0].header.keys()) else None ,headers))))
-		for x in fitHeaders:
-			fitHeaders[x]=float(fitHeaders[x]) if is_float(fitHeaders[x]) else fitHeaders[x].strip() if fitHeaders[x] is not None else fitHeaders[x]
-	
+
+	try:
+		with fits.open(fit) as hduList:
+			headers = ["READMODE", "OBJECT", "GAIN", "OFFSET",  "EXPTIME", "EXPOSURE", "IMAGETYP", "DATE-OBS", "CCD-TEMP", "FILTER", "XBINNING", "YBINNING","RA","DEC"]
+			fitHeaders=dict(list(zip(headers, map(lambda x:hduList[0].header[x] if x.lower() in map(lambda x:x.lower(), hduList[0].header.keys()) else None ,headers))))
+			for x in fitHeaders:
+				fitHeaders[x]=float(fitHeaders[x]) if is_float(fitHeaders[x]) else fitHeaders[x].strip() if fitHeaders[x] is not None else fitHeaders[x]
+	except:
+		return None
 	fitHeaders["EXPTIME"] = fitHeaders["EXPTIME"] if fitHeaders["EXPTIME"] is not None else fitHeaders["EXPOSURE"]
 	fitHeaders["IMAGETYP"] = "LIGHT" if fitHeaders["IMAGETYP"] is not None and fitHeaders["IMAGETYP"].lower() in ["light frame", "light"] else fitHeaders["IMAGETYP"]
 	try:
@@ -231,12 +233,18 @@ for dir in options.dirs:
 
 	for fullPath in filesList:
 		bar.update()
-		
-		if PROJECT_INFO_FILE == Path(fullPath).name and pinfo is None:
-			pinfo = loadProjectInfo(fullPath)
+
+		if (Path(dir).joinpath(PROJECT_INFO_FILE)).exists():
+			# get project info file only from the first level tree
+			logger.debug("detected project info file: %s" % Path(dir).joinpath(PROJECT_INFO_FILE))
+			pinfo = loadProjectInfo(Path(dir).joinpath(PROJECT_INFO_FILE))
+
+#		if PROJECT_INFO_FILE == Path(fullPath).name and pinfo is None:
+#			pinfo = loadProjectInfo(fullPath)
+#
 			# pinfo  = {'project': {'objects': {'object': [{'@name': 'M_81', '@aliases': 'M 81, bode', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}, {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}, {'@name': 'M_106', '@aliases': 'M 106, galaxyM106', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}]}}}
 
-			logger.debug("detected project info file: %s" % Path(root).joinpath(PROJECT_INFO_FILE))
+#			logger.debug("detected project info file: %s" % Path(root).joinpath(PROJECT_INFO_FILE))
 
 		if True in map(lambda x:str(fullPath).endswith(x), extensions):
 			# valid fit file
@@ -244,7 +252,10 @@ for dir in options.dirs:
 			if not Path(fullPath).exists():
 				logger.warning("skipping non existent (broken link?) file: %s" % fullPath)
 				continue
-			headers=getFitHeaders(fullPath)
+			headers = getFitHeaders(fullPath)
+			if headers is None:
+				logger.warning("could not read headers from: %s  -- skipping" % fullPath)
+				continue
 			
 			dateobs=headers["DATE-OBS"] if headers["DATE-OBS"] else None
 			imagetyp=headers["IMAGETYP"]
@@ -283,8 +294,8 @@ for dir in options.dirs:
 			if sessiondate not in sessions.keys(): sessions[sessiondate] = []
 			sessions[sessiondate].append({'file': fullPath, 'gain': gain, 'object': oobject, 'exptime': exptime, 'filter': ffilter, 'offset': offset, 'ccd_temp': ccd_temp})
 			# sessions["20230314T1200"]=[{"file": "/home/...", "gain": "56", "object": "M_81", "exptime": "3600", "filter": "Ha", ... }, {"file":...}] 
-
-			if oobject.upper() not in map(lambda x: x.upper(), objects.keys()): objects[oobject] = {"exposures":{}}
+			if oobject.upper() not in map(lambda x: x.upper(), objects.keys()): 
+				objects[oobject] = {"exposures":{}}
 			objects[oobject]["exposures"][ffilter] = exptime if ffilter.upper() not in map(lambda x: x.upper(), objects[oobject]["exposures"].keys()) else objects[oobject]["exposures"][ffilter]+exptime
 			# objects={"M_81": {"exposures": {"L": 6400, "R": 3200}, "M_31": ... } }
 	
@@ -298,6 +309,7 @@ for dir in options.dirs:
 		# pinfo  = {'project': {'objects': {'object': [{'@name': 'M_81', '@aliases': 'M 81, bode', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}, {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}, {'@name': 'M_106', '@aliases': 'M 106, galaxyM106', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}]}}}		
 		
 		lostObjects = set(map(lambda x: x["@name"], pinfo["project"]["objects"]["object"])) - set(objects.keys())
+		# lostObjects are the objects defined in the project but not detected in the dir
 		if lostObjects != set():
 			for lostObject in lostObjects:
 				objects[lostObject] = {"exposures":{}}
@@ -403,8 +415,7 @@ for dir in options.dirs:
 
 			# sessions["20230314T1200"]=[{"file": "/home/...", "gain": "56", "object": "M_81", "exptime": "300", "filter": "Ha", ... }, {"file":...}] 
 			# pinfo  = {'project': {'objects': {'object': [{'@name': 'M_81', '@aliases': 'M 81, bode', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}, {'@name': 'R, G, B', '@subexposures': '180, 300', '@requiredTotalExposure': '3*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}, {'@name': 'M_106', '@aliases': 'M 106, galaxyM106', 'exposures': {'filter': [{'@name': 'L', '@subexposures': '180, 300', '@requiredTotalExposure': '10*3600', '@gain': '56', '@offset': '30'}]}, 'constraints': {'@minimumaltitude': '45'}}]}}}
-			
-			
+						
 			if pinfo is not None or (pinfo is None and k == len(objects.keys())-1):
 				# if no project info exists, print sessions only once
 				if "astrobin" in config["config"].keys() and pinfo is not None: astrobincsv = [["date","filter","number","duration","gain","sensorCooling","fNumber","darks","flats","bias"]]
@@ -418,7 +429,7 @@ for dir in options.dirs:
 						o2=getObjectMainName(oobject, pinfo)
 						o2=o2 if o2 is not None else ""
 						if pinfo is not None and o1.upper() != o2.upper(): continue
-						if (o1.upper() if pinfo is not None else entry['oobject'].upper() == o2.upper()) if pinfo is not None else True:
+						if ((o1.upper() if pinfo is not None else entry['oobject'].upper()) == o2.upper()) if pinfo is not None else True:
 							if entry["gain"] is not None:
 								exptime=entry['exptime']
 								ccd_temp=entry['ccd_temp'] 
@@ -451,7 +462,7 @@ for dir in options.dirs:
 					
 					
 				print("Sessions summary")
-				print(tabulate(sessionRows, headers=["Session", "Lights","Date"], tablefmt="github") if sessionRows != [] else "no sessions data for '%s'" % oobject)
+				print(tabulate(sessionRows, headers=["Session", "Lights","Date"], tablefmt="github") if sessionRows != [] else "no sessions data for object '%s'" % oobject)
 
 				if "astrobin" in config["config"].keys() and pinfo is not None: 
 					print()
