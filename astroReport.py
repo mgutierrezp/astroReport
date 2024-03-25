@@ -250,7 +250,7 @@ for dir in options.dirs:
 			# valid fit file
 			logger.debug(fullPath)
 			if not Path(fullPath).exists():
-				logger.warning("skipping non existent (broken link?) file: %s" % fullPath)
+				logger.debug("skipping non existent (broken link?) file: %s" % fullPath)
 				continue
 			headers = getFitHeaders(fullPath)
 			if headers is None:
