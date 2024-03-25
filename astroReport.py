@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-VERSION="1.0f"
+VERSION="1.0g"
 
 import sys,argparse,logging,os,humanize,itertools,math
 from tabulate import tabulate
@@ -234,7 +234,7 @@ for dir in options.dirs:
 	for fullPath in filesList:
 		bar.update()
 
-		if (Path(dir).joinpath(PROJECT_INFO_FILE)).exists():
+		if (Path(dir).joinpath(PROJECT_INFO_FILE)).exists() and pinfo is None:
 			# get project info file only from the first level tree
 			logger.debug("detected project info file: %s" % Path(dir).joinpath(PROJECT_INFO_FILE))
 			pinfo = loadProjectInfo(Path(dir).joinpath(PROJECT_INFO_FILE))
@@ -277,7 +277,7 @@ for dir in options.dirs:
 			ccd_temp=headers["CCD-TEMP"]
 			oobject=headers["OBJECT"] if headers["OBJECT"] is not None else ""
 
-			if oobject == "": logger.warning("file %s does not have an OBJECT fit header or is empty!" % fullPath)
+			if oobject == "": logger.debug("file %s does not have an OBJECT fit header or is empty!" % fullPath)
 
 			if pinfo is not None and oobject.upper() not in map(lambda x: x.upper(), getAllObjectsNames(pinfo)):
 				logger.debug("skipping file %s with object not defined in project info (%s)" % (fullPath, oobject))
@@ -291,13 +291,16 @@ for dir in options.dirs:
 			midday = dateobs.replace(hour=12,minute=0,second=0,microsecond=0)
 			sessiondate = midday if dateobs > midday else midday - dt.timedelta(days=1)
 			
-			if sessiondate not in sessions.keys(): sessions[sessiondate] = []
-			sessions[sessiondate].append({'file': fullPath, 'gain': gain, 'object': oobject, 'exptime': exptime, 'filter': ffilter, 'offset': offset, 'ccd_temp': ccd_temp})
-			# sessions["20230314T1200"]=[{"file": "/home/...", "gain": "56", "object": "M_81", "exptime": "3600", "filter": "Ha", ... }, {"file":...}] 
-			if oobject.upper() not in map(lambda x: x.upper(), objects.keys()): 
-				objects[oobject] = {"exposures":{}}
-			objects[oobject]["exposures"][ffilter] = exptime if ffilter.upper() not in map(lambda x: x.upper(), objects[oobject]["exposures"].keys()) else objects[oobject]["exposures"][ffilter]+exptime
-			# objects={"M_81": {"exposures": {"L": 6400, "R": 3200}, "M_31": ... } }
+			if (pinfo is not None and ffilter in reduce(lambda x,y: x+y, getObjectFilters(oobject, pinfo))) or pinfo is None:
+				# only compute if filter is defined in project or there is no project
+				if sessiondate not in sessions.keys(): sessions[sessiondate] = []
+				sessions[sessiondate].append({'file': fullPath, 'gain': gain, 'object': oobject, 'exptime': exptime, 'filter': ffilter, 'offset': offset, 'ccd_temp': ccd_temp})
+				# sessions["20230314T1200"]=[{"file": "/home/...", "gain": "56", "object": "M_81", "exptime": "3600", "filter": "Ha", ... }, {"file":...}] 
+			
+				if oobject.upper() not in map(lambda x: x.upper(), objects.keys()): 
+					objects[oobject] = {"exposures":{}}
+				objects[oobject]["exposures"][ffilter] = exptime if ffilter.upper() not in map(lambda x: x.upper(), objects[oobject]["exposures"].keys()) else objects[oobject]["exposures"][ffilter]+exptime
+				# objects={"M_81": {"exposures": {"L": 6400, "R": 3200}, "M_31": ... } }
 	
 	bar.close()
 	

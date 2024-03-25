@@ -63,7 +63,7 @@ INSTALACIÓN MANUAL (no recomendado; no necesario)
 - Instalar Python >= 3.12
 - Cree un nuevo entorno virtual y actívelo (asegúrese de que está ejecutando python v3 y no v2):
 
-        $ python -m venv whatsup_venv
+        $ python -m venv astroReport_venv
         # usuarios linux:
 
                 $ source astroReport_env/bin/activate
