@@ -433,11 +433,11 @@ for dir in options.dirs:
 						o2=o2 if o2 is not None else ""
 						if pinfo is not None and o1.upper() != o2.upper(): continue
 						if ((o1.upper() if pinfo is not None else entry['oobject'].upper()) == o2.upper()) if pinfo is not None else True:
-							if entry["gain"] is not None:
+							if entry["exptime"] is not None:
 								exptime=entry['exptime']
-								ccd_temp=entry['ccd_temp'] 
-								gain=int(entry['gain'])
-								offset=int(entry['offset'])
+								ccd_temp=entry['ccd_temp']
+								gain=int(entry['gain']) if entry['gain'] is not None else None
+								offset=int(entry['offset']) if entry['offset'] is not None else None
 								
 								if entry["filter"] not in ffilters.keys(): 
 									ffilters[entry["filter"]] = {"exposures":{}, "ccd_temp": 0}
@@ -449,7 +449,7 @@ for dir in options.dirs:
 								ffilters[entry["filter"]]["gain"] = gain
 								ffilters[entry["filter"]]["offset"] = offset
 							else:
-								logger.warning("discarding file %s. No gain value within fits headers" % entry["file"])
+								logger.warning("discarding file %s. No exposure time value within fits headers" % entry["file"])
 
 					finfo=[]
 					# ffilters = {'R': {'exposures': {120.0: 13}, 'ccd_temp': -5.0}, 'B': {'exposures': {120.0: 10}, 'ccd_temp': -5.0}, 'G': {'exposures': {120.0: 10}, 'ccd_temp': -5.0}}
