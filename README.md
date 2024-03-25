@@ -81,6 +81,7 @@ INSTALACIÓN MANUAL (no recomendado; no necesario)
 
         $ pip install -r requirements.txt
 
+- Descarga el archivo de config 'astroReport.config.xml' y 'ekosTemplates' en el mismo directorio
 
 USO
 ==============
