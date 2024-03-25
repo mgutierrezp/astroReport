@@ -89,18 +89,32 @@ Si eres un usuario de windows y has usado el método rápido de instalación, s�
 Los usuarios de linux también pueden hacer lo mismo pero el procedimiento depende de la distribución y el administrador de archivo que uses. En nemo, por ejemplo, basta con crear la acción correspondient en ~/.local/share/nemo/actions  
 En cualquier caso se puede ejecutar desde la línea de comandos pasando como parámetro obligatorio el directorio (o varios) que quieres analizar  
 
+    usage: astroReport.py
+
+    positional arguments:
+        dirs
+
+    options:
+        -h, --help            show this help message and exit
+        -v                    write some debug info
+        -V, --version         show program's version number and exit
+        --config-file CONFIG_FILE   alternative xml config file. Default: /.../astroReport.config.xml
+        --ekos                generate ekos sequences. Default: False
+        --wait-on-exit, --woe   wait on exit. Default: False
+
 Opciones:
 
 dirs: directorio(s) a analizar
 - -v: imprime información de depuración
 - -V: imprime versión y termina
-- -h: imrpime la ayuda
+- -h: imprime la ayuda
 - --config-file: archivo de configuración general. Defecto: astroReport.config.xml
 - --ekos: genera la secuencias necesarias para importar en kstars/ekos. Default: False  
 - --wait-on-exit, --woe: espera a pulsar una tecla al finalizar. Default: False  
 
 Ejemplo básico:  
-./astroReport /astro/proyectos/M_42
+
+    ./astroReport /astro/proyectos/M_42
 
 ARCHIVO DE CONFIGURACIÓN GENERAL
 ==============
