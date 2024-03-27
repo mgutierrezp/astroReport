@@ -161,5 +161,7 @@ Este archivo de configuración definirá tu proyecto en cuanto a número de ligh
             - file: path completo al fit de referencia. Si se indica "auto", astroReport buscará en 'sequences -> dir' (ver archivo de configuración general) todos los fits y usará de referencia el primero que encuentre que coincida el nombre del objeto (cabecera OBJECT) con el objeto de nuestro proyecto
         - camera: características de disparo de la cámara (solo ekos)
             - temperature: temperatura de disparo de la cámara
-            - width y height: ancho y alto del frame a capturar. Normalmente, deberás poner aquí el tamaño del sensor, en píxeles
+            - width y height: ancho y alto del frame a capturar. Normalmente, deberás poner aquí el tamaño del sensor, en
+        - filename
+            - regexes: sólo analiza los fits que coinciden con las expresiones regulares indicadas (separadas por ,). La macro %%OBJECT%% será sustituida por cada uno de los nombres y alias de los objetos del proyecto. Esta sería su forma más común de uso: "^.\*%%OBJECT%%.*"  tal y como viene en el xml de ejemplo
 

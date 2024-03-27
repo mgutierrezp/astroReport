@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-VERSION="1.0h"
+VERSION="1.0i"
 
-import sys,argparse,logging,os,humanize,itertools,math
+import sys,argparse,logging,os,humanize,itertools,math, re
 from tabulate import tabulate
 import datetime as dt
 from astropy.io import fits
@@ -201,8 +201,28 @@ def getFilterProperties(oobject, filt, pinfo):
 
 	return None
 
-#####################################################################################
+def considerFile(name, pinfo):
+	# consider the file 'name' if matches some regex within the xml project config; if defined
 
+	if pinfo is None:
+		return True
+
+	for _object in pinfo["project"]["objects"]["object"]:
+		if "filename" not in _object.keys():
+			return True
+		for regex in map(lambda x:x.strip(), _object["filename"]["@regexes"].split(",")):
+			if re.search('%%OBJECT%%', regex):
+				for nn in getAllObjectsNames(pinfo):
+					if re.match(re.compile(regex.replace("%%OBJECT%%", nn), flags=re.IGNORECASE), name):
+						return True
+			else:
+				if re.match(re.compile(regex, flags=re.IGNORECASE), name) or regex == "":
+					return True
+
+	return False
+
+#(True if pinfo is None else True in map(lambda x: True if x else False, map(lambda x: re.match(re.compile(x, flags=re.IGNORECASE), fullPath.name), filter(lambda x: x is not None, (map(lambda x:x["filename"]["@regexes"] if "filename" in x.keys() else None, pinfo["project"]["objects"]["object"])))))):
+#####################################################################################
 
 
 parser = parse_options()
@@ -246,7 +266,7 @@ for dir in options.dirs:
 
 #			logger.debug("detected project info file: %s" % Path(root).joinpath(PROJECT_INFO_FILE))
 
-		if True in map(lambda x:str(fullPath).endswith(x), extensions):
+		if True in map(lambda x:str(fullPath).endswith(x), extensions) and considerFile(fullPath.name, pinfo):
 			# valid fit file
 			logger.debug(fullPath)
 			if not Path(fullPath).exists():

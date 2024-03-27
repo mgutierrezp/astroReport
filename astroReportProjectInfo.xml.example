@@ -10,6 +10,7 @@
 			</exposures>
 			<referenceFit file="auto" />
 			<camera temperature="-5" width="6252" height="4176" />
+			<filename regexes="^.*%%OBJECT%%.*" />
 		</object>
 </objects>
 
