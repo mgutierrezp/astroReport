@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-VERSION="1.0i"
+VERSION="1.0j"
 
 import sys,argparse,logging,os,humanize,itertools,math, re
 from tabulate import tabulate
@@ -173,7 +173,7 @@ def getObjectAliases(oobject, pinfo):
 	return None
 
 def getAllObjectsNames(pinfo, includeAlias=True):
-	return reduce(lambda x,y: x+y, map(lambda x: [x["@name"]] + (list(map(lambda y: y.strip(), x["@aliases"].split(","))) if includeAlias else []) , pinfo["project"]["objects"]["object"])) 
+	return list(filter(lambda x: x!= "", reduce(lambda x,y: x+y, map(lambda x: [x["@name"]] + (list(map(lambda y: y.strip(), x["@aliases"].split(","))) if includeAlias else []) , pinfo["project"]["objects"]["object"]))))
 		
 
 def stringToList(s):
